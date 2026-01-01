@@ -1,0 +1,56 @@
+/* static/style.css */
+body {
+    background-color: #E6E6FA; /* 淡紫色背景 */
+    font-family: 'Arial', sans-serif;
+    display: flex;
+    justify_content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+}
+
+.container {
+    background-color: white;
+    padding: 40px;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(75, 0, 130, 0.2); /* 深紫色阴影 */
+    width: 350px;
+    text-align: center;
+    border-top: 5px solid #9370DB; /* 顶部紫色条 */
+}
+
+h2 {
+    color: #4B0082; /* 深靛蓝标题 */
+    margin-bottom: 20px;
+}
+
+input, select {
+    width: 100%;
+    padding: 10px;
+    margin: 10px 0;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    box-sizing: border-box;
+}
+
+button {
+    width: 100%;
+    padding: 10px;
+    background-color: #9370DB; /* 按钮紫色 */
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-top: 10px;
+}
+
+button:hover {
+    background-color: #8A2BE2; /* 悬停时变深 */
+}
+
+.message {
+    color: red;
+    font-size: 14px;
+    margin-top: 10px;
+}

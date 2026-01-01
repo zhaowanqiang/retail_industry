@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>数据可视化分析</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        body { background-color: #F3F0FF; font-family: 'Microsoft YaHei', sans-serif; }
+        .navbar { background: linear-gradient(135deg, #663399 0%, #9370DB 100%); }
+        .nav-link { color: rgba(255,255,255,0.8) !important; margin-right: 15px; }
+        .nav-link.active { color: white !important; font-weight: bold; }
+
+        .chart-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            height: 400px; /* 图表高度 */
+            margin-bottom: 20px;
+        }
+        .chart-title {
+            border-left: 5px solid #663399;
+            padding-left: 10px;
+            font-weight: bold;
+            color: #444;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-expand-lg">
+        <div class="container">
+            <a class="navbar-brand text-white" href="#">零售信贷分析系统</a>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/dashboard"><i class="fas fa-list me-1"></i> 数据列表</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/analysis"><i class="fas fa-chart-pie me-1"></i> 可视化分析</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/prediction"><i class="fas fa-brain me-1"></i> AI 预测</a>
+                    </li>
+                </ul>
+            </div>
+            <span class="text-white">管理员</span>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="chart-card">
+                    <div class="chart-title">各行业贷款申请占比</div>
+                    <div id="chart1" style="width: 100%; height: 320px;"></div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="chart-card">
+                    <div class="chart-title">商户信用评分分布</div>
+                    <div id="chart2" style="width: 100%; height: 320px;"></div>
+                </div>
+            </div>
+
+            <div class="col-md-12">
+                <div class="chart-card">
+                    <div class="chart-title">各城市贷款申请与通过量对比</div>
+                    <div id="chart3" style="width: 100%; height: 320px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // === 图表1：行业分布 (饼图) ===
+        var chart1 = echarts.init(document.getElementById('chart1'));
+        // 这里的数据是后端传过来的，使用 Jinja2 的 | tojson 安全过滤器
+        var industryData = {{ industry_data | tojson }};
+
+        chart1.setOption({
+            tooltip: { trigger: 'item' },
+            legend: { top: '5%', left: 'center' },
+            series: [{
+                name: '行业类型',
+                type: 'pie',
+                radius: ['40%', '70%'], // 环形图
+                avoidLabelOverlap: false,
+                itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
+                data: industryData
+            }]
+        });
+
+        // === 图表2：信用分 (雷达图/仪表盘/柱状图，这里用柱状图展示区间) ===
+        var chart2 = echarts.init(document.getElementById('chart2'));
+        var scoreX = {{ score_x | tojson }}; // 分数区间 [500-600, 600-700...]
+        var scoreY = {{ score_y | tojson }}; // 对应人数
+
+        chart2.setOption({
+            tooltip: { trigger: 'axis' },
+            grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+            xAxis: { type: 'category', data: scoreX },
+            yAxis: { type: 'value' },
+            series: [{
+                data: scoreY,
+                type: 'bar',
+                showBackground: true,
+                backgroundStyle: { color: 'rgba(180, 180, 180, 0.2)' },
+                itemStyle: { color: '#9370DB' } // 紫色柱子
+            }]
+        });
+
+        // === 图表3：城市统计 (折线图/柱状图) ===
+        var chart3 = echarts.init(document.getElementById('chart3'));
+        var cityNames = {{ city_names | tojson }};
+        var cityCounts = {{ city_counts | tojson }};
+
+        chart3.setOption({
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'category', data: cityNames },
+            yAxis: { type: 'value' },
+            series: [{
+                data: cityCounts,
+                type: 'line',
+                smooth: true,
+                areaStyle: {
+                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                        { offset: 0, color: 'rgb(102, 51, 153)' }, // 深紫
+                        { offset: 1, color: 'rgb(255, 255, 255)' }
+                    ])
+                },
+                itemStyle: { color: '#663399' }
+            }]
+        });
+
+        // 窗口大小改变时，图表自动适应
+        window.onresize = function() {
+            chart1.resize();
+            chart2.resize();
+            chart3.resize();
+        };
+    </script>
+</body>
+</html>

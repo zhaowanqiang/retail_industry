@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>AI 智能贷款预测</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #F3F0FF; font-family: 'Microsoft YaHei', sans-serif; }
+        .navbar { background: linear-gradient(135deg, #663399 0%, #9370DB 100%); }
+        .nav-link { color: rgba(255,255,255,0.7) !important; margin-right: 15px; }
+        .nav-link.active { color: white !important; font-weight: bold; border-bottom: 2px solid white; }
+
+        .main-card {
+            background: white; border-radius: 15px; padding: 40px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1); margin-top: 30px;
+            max-width: 800px; margin-left: auto; margin-right: auto;
+        }
+        .form-label { font-weight: 600; color: #555; }
+        .btn-predict {
+            background: linear-gradient(to right, #663399, #9370DB); border: none;
+            padding: 12px 30px; font-size: 18px; border-radius: 30px; width: 100%;
+            transition: transform 0.2s;
+        }
+        .btn-predict:hover { transform: scale(1.02); }
+
+        /* 结果展示区 */
+        .result-box {
+            margin-top: 30px; padding: 30px; border-radius: 15px;
+            text-align: center; display: none; /* 默认隐藏 */
+        }
+        .result-show { display: block; animation: fadeIn 0.5s; }
+
+        .pass-box { background-color: #e6f9ed; border: 2px solid #28a745; color: #28a745; }
+        .reject-box { background-color: #ffe6e6; border: 2px solid #dc3545; color: #dc3545; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-expand-lg sticky-top">
+        <div class="container">
+            <a class="navbar-brand text-white" href="#"><i class="fas fa-robot me-2"></i>零售信贷分析系统</a>
+            <div class="collapse navbar-collapse ms-4">
+                <ul class="navbar-nav">
+                    <li class="nav-item"><a class="nav-link" href="/dashboard"><i class="fas fa-list me-1"></i> 数据列表</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/analysis"><i class="fas fa-chart-pie me-1"></i> 可视化分析</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="#"><i class="fas fa-brain me-1"></i> AI 预测</a></li>
+                </ul>
+            </div>
+            <a href="/" class="btn btn-sm btn-light text-primary fw-bold">退出</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="main-card">
+            <h3 class="text-center mb-4" style="color: #663399;">
+                <i class="fas fa-magic me-2"></i>智能贷款审批预测
+            </h3>
+            <p class="text-center text-muted mb-5">
+                基于随机森林 (Random Forest) 算法，输入商户核心经营指标，系统将自动评估其贷款风险。
+            </p>
+
+            <form method="POST" action="/prediction">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <label class="form-label">注册金额 (万元)</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-coins"></i></span>
+                            <input type="number" name="amount" class="form-control" placeholder="例如: 50" required step="0.1">
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">企业信用评分 (0-1000)</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-star"></i></span>
+                            <input type="number" name="score" class="form-control" placeholder="例如: 650" required>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">经营年份 (年)</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-history"></i></span>
+                            <input type="number" name="years" class="form-control" placeholder="例如: 5" required>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">月均营收 (万元)</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-money-bill-wave"></i></span>
+                            <input type="number" name="monthly_flow" class="form-control" placeholder="例如: 20" required step="0.1">
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">月均成本 (万元)</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-file-invoice-dollar"></i></span>
+                            <input type="number" name="cost" class="form-control" placeholder="例如: 15" required step="0.1">
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">月均客流量 (人次)</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-users"></i></span>
+                            <input type="number" name="traffic" class="form-control" placeholder="例如: 3000" required>
+                        </div>
+                    </div>
+
+                    <div class="col-12 mt-5">
+                        <button type="submit" class="btn btn-primary btn-predict">
+                            <i class="fas fa-calculator me-2"></i>开始 AI 评估
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            {% if result %}
+            <div class="result-box result-show {% if result.is_pass == 1 %}pass-box{% else %}reject-box{% endif %}">
+
+                {% if result.is_pass == 1 %}
+                    <i class="fas fa-check-circle fa-4x mb-3"></i>
+                    <h2>建议审批通过</h2>
+                    <p class="fs-5">通过概率: <strong>{{ result.probability }}%</strong></p>
+                    <p>该商户经营状况良好，属于优质客户。</p>
+                {% else %}
+                    <i class="fas fa-times-circle fa-4x mb-3"></i>
+                    <h2>建议拒绝贷款</h2>
+                    <p class="fs-5">通过概率仅为: <strong>{{ result.probability }}%</strong></p>
+                    <p>该商户存在较高风险，建议人工复核或拒单。</p>
+                {% endif %}
+
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

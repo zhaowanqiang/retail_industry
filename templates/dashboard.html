@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>零售信贷分析 - 智能工作台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
+    <style>
+        /* === 全局风格 === */
+        body {
+            background-color: #F3F0FF;
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            color: #444;
+        }
+
+        /* === 顶部导航栏美化 === */
+        .navbar {
+            background: linear-gradient(135deg, #663399 0%, #9370DB 100%);
+            box-shadow: 0 2px 10px rgba(75, 0, 130, 0.2);
+            padding-top: 0.8rem;
+            padding-bottom: 0.8rem;
+        }
+        .navbar-brand {
+            color: white !important;
+            font-weight: bold;
+            font-size: 1.3rem;
+        }
+
+        /* 导航菜单链接样式 */
+        .nav-link {
+            color: rgba(255, 255, 255, 0.7) !important;
+            font-size: 1rem;
+            margin-right: 15px;
+            transition: all 0.3s;
+        }
+        .nav-link:hover {
+            color: white !important;
+        }
+        /* 当前激活页面的样式 */
+        .nav-link.active {
+            color: white !important;
+            font-weight: bold;
+            border-bottom: 2px solid white; /* 底部加个白线 */
+        }
+
+        .user-profile {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 6px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            color: white;
+        }
+
+        /* === 主容器 === */
+        .main-card {
+            background: white;
+            border-radius: 12px;
+            border: none;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+            margin-top: 30px;
+            margin-bottom: 30px;
+            padding: 25px;
+        }
+
+        /* === 表格 === */
+        .table-custom thead {
+            background-color: #f8f9fa;
+            color: #666;
+            font-weight: 600;
+            border-bottom: 2px solid #e9ecef;
+        }
+        .table-custom th { border: none; padding: 15px 10px; white-space: nowrap; }
+        .table-custom td { vertical-align: middle; padding: 12px 10px; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
+        .table-hover tbody tr:hover { background-color: #F8F0FF; }
+
+        /* 状态徽章 */
+        .badge-status { padding: 5px 10px; border-radius: 4px; font-size: 12px; font-weight: normal; }
+        .bg-pass { background-color: #e6f9ed; color: #28a745; border: 1px solid #bcebd1; }
+        .bg-reject { background-color: #ffe6e6; color: #dc3545; border: 1px solid #fadbd8; }
+        .bg-review { background-color: #fff8e1; color: #ffc107; border: 1px solid #ffecb5; }
+
+        /* === 卡片 === */
+        .stat-card {
+            border: none; border-radius: 8px; color: white; height: 120px;
+            position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        .stat-card:hover { transform: translateY(-3px); }
+        .card-body-custom { padding: 20px; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; z-index: 2; position: relative; }
+        .card-label { font-size: 0.9rem; opacity: 0.9; margin-bottom: 5px; }
+        .card-value { font-size: 2.2rem; font-weight: bold; font-family: 'Arial', sans-serif; }
+        .card-icon-bg { position: absolute; right: -10px; bottom: -15px; font-size: 5rem; opacity: 0.15; z-index: 1; transform: rotate(-15deg); }
+        .card-blue { background: #4169E1; }
+        .card-gray { background: #6c757d; }
+        .card-green { background: #28a745; }
+        .card-red { background: #dc3545; }
+        .card-yellow { background: #ffc107; color: #333 !important; }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-expand-lg sticky-top">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-chart-line me-2"></i>零售信贷分析系统
+            </a>
+
+            <div class="collapse navbar-collapse ms-4" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/dashboard"><i class="fas fa-list me-1"></i> 数据列表</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/analysis"><i class="fas fa-chart-pie me-1"></i> 可视化分析</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/prediction"><i class="fas fa-brain me-1"></i> AI 预测</a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="d-flex align-items-center">
+                <div class="user-profile me-3">
+                    <i class="fas fa-user-circle me-1"></i> {{ username }} ({{ role }})
+                </div>
+                <a href="/" class="btn btn-sm btn-light text-primary fw-bold">退出</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="main-card">
+
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h5 class="fw-bold text-secondary mb-0">
+                    <i class="fas fa-history me-2"></i>贷款申请记录
+                </h5>
+
+                <div class="d-flex gap-2">
+
+                    <form action="/dashboard" method="get" class="d-flex">
+                        <div class="input-group">
+                            <input type="text" name="q" class="form-control"
+                                   placeholder="搜商户/ID..."
+                                   value="{{ search_query or '' }}"
+                                   style="width: 200px;"> <button class="btn btn-primary" type="submit" style="background-color: #663399; border-color: #663399;">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                    </form>
+
+                    <a href="/dashboard" class="btn btn-outline-secondary" title="重置/刷新">
+                        <i class="fas fa-sync-alt"></i>
+                    </a>
+
+                    <a href="/export?q={{ search_query or '' }}" class="btn btn-success text-white" title="下载 Excel报表">
+                        <i class="fas fa-file-excel me-1"></i> 导出报表
+                    </a>
+    <button class="btn btn-primary ms-2" data-bs-toggle="modal" data-bs-target="#addModal">
+                        <i class="fas fa-plus"></i> 新增
+                    </button>
+
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-custom table-hover">
+                    <thead>
+                        <tr>
+                            <th>#ID</th>
+                            <th>品类/商户</th>
+                            <th>行业类型</th>
+                            <th>注册金额</th>
+                            <th>信用评分</th>
+                            <th>月均营收</th>
+                            <th>申请时间</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in rows %}
+                        <tr>
+                            <td>{{ row.id }}</td>
+                            <td class="fw-bold">{{ row.name }}</td>
+                            <td>{{ row.type }}</td>
+                            <td>¥ {{ row.amount }} 万</td>
+                            <td>
+                                {% if row.score >= 700 %}
+                                    <span class="text-success fw-bold">{{ row.score }}</span>
+                                {% elif row.score >= 600 %}
+                                    <span class="text-warning fw-bold">{{ row.score }}</span>
+                                {% else %}
+                                    <span class="text-danger fw-bold">{{ row.score }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ row.monthly_flow }}</td>
+                            <td>{{ row.date }}</td>
+                            <td>
+                                {% if '通过' in row.status %}
+                                    <span class="badge-status bg-pass">{{ row.status }}</span>
+                                {% elif '复核' in row.status %}
+                                    <span class="badge-status bg-review">{{ row.status }}</span>
+                                {% else %}
+                                    <span class="badge-status bg-reject">{{ row.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-light text-primary" onclick="showDetail(this)"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#detailModal"
+                                        title="查看详情"
+                                        data-id="{{ row.id }}"
+                                        data-name="{{ row.name }}"
+                                        data-type="{{ row.type }}"
+                                        data-city="{{ row.city }}"
+                                        data-city_level="{{ row.city_level }}"
+                                        data-years="{{ row.years }}"
+                                        data-employees="{{ row.employees }}"
+                                        data-area="{{ row.area }}"
+                                        data-traffic="{{ row.traffic }}"
+                                        data-monthly_flow="{{ row.monthly_flow }}"
+                                        data-cost="{{ row.cost }}"
+                                        data-amount="{{ row.amount }}"
+                                        data-score="{{ row.score }}">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+
+                                {% if role == 'admin' %}
+
+                                    <button class="btn btn-sm btn-light text-warning" onclick="openEditModal(this)"
+                                            title="编辑修改"
+                                            data-id="{{ row.id }}"
+                                            data-name="{{ row.name }}"
+                                            data-amount="{{ row.amount }}"
+                                            data-score="{{ row.score }}"
+                                            data-type="{{ row.type }}"
+                                            data-monthly_flow="{{ row.monthly_flow }}"
+                                            data-cost="{{ row.cost }}"
+                                            data-traffic="{{ row.traffic }}"
+                                            data-city="{{ row.city }}">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+
+                                    <form action="/delete/{{ row.id }}" method="post" style="margin:0;" onsubmit="return confirm('⚠️ 确定要删除这条数据吗？');">
+                                        <button type="submit" class="btn btn-sm btn-light text-danger" title="删除数据">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+
+                                {% endif %}
+                                </div>
+                        </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <nav aria-label="Page navigation" class="d-flex justify-content-center mt-4">
+                <ul class="pagination">
+                    <li class="page-item {% if current_page == 1 %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('dashboard', page=current_page-1, user=username, q=search_query) }}">上一页</a>
+                    </li>
+
+                    <li class="page-item disabled">
+                        <span class="page-link" style="background-color: #f3f0ff; color: #663399; font-weight: bold;">
+                            第 {{ current_page }} 页 / 共 {{ total_pages }} 页
+                        </span>
+                    </li>
+
+                    <li class="page-item {% if current_page == total_pages %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('dashboard', page=current_page+1, user=username, q=search_query) }}">下一页</a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+
+        <div class="row row-cols-1 row-cols-md-5 g-3 mb-5">
+            <div class="col"><div class="stat-card card-blue"><i class="fas fa-file-invoice card-icon-bg"></i><div class="card-body-custom"><div class="card-label">总申请单数</div><div class="card-value">{{ stats.total_count }}</div></div></div></div>
+            <div class="col"><div class="stat-card card-gray"><i class="fas fa-clock card-icon-bg"></i><div class="card-body-custom"><div class="card-label">待人工复核</div><div class="card-value">{{ stats.review_count }}</div></div></div></div>
+            <div class="col"><div class="stat-card card-green"><i class="fas fa-coins card-icon-bg"></i><div class="card-body-custom"><div class="card-label">放款总额(万)</div><div class="card-value">{{ stats.pass_amount }}</div></div></div></div>
+            <div class="col"><div class="stat-card card-red"><i class="fas fa-ban card-icon-bg"></i><div class="card-body-custom"><div class="card-label">高风险拒单</div><div class="card-value">{{ stats.reject_count }}</div></div></div></div>
+            <div class="col"><div class="stat-card card-yellow"><i class="fas fa-chart-bar card-icon-bg"></i><div class="card-body-custom"><div class="card-label">平均信用分</div><div class="card-value">{{ stats.avg_score }}</div></div></div></div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header text-white" style="background: linear-gradient(135deg, #663399, #9370DB);">
+                    <h5 class="modal-title"><i class="fas fa-store me-2"></i>商户详细档案</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row g-3">
+                        <div class="col-md-6"><label class="text-secondary small">企业ID</label><div class="fw-bold fs-5" id="m_id">--</div></div>
+                        <div class="col-md-6"><label class="text-secondary small">商户名称</label><div class="fw-bold fs-5" id="m_name">--</div></div>
+                        <div class="col-12"><hr class="my-2"></div>
+                        <div class="col-md-4"><label class="text-secondary small">所在城市</label><div class="fw-bold" id="m_city">--</div></div>
+                        <div class="col-md-4"><label class="text-secondary small">城市等级</label><div class="fw-bold" id="m_city_level">--</div></div>
+                        <div class="col-md-4"><label class="text-secondary small">经营年份</label><div class="fw-bold"><span id="m_years">--</span> 年</div></div>
+                        <div class="col-md-4"><label class="text-secondary small">员工人数</label><div class="fw-bold"><span id="m_employees">--</span> 人</div></div>
+                        <div class="col-md-4"><label class="text-secondary small">门店面积</label><div class="fw-bold"><span id="m_area">--</span> ㎡</div></div>
+                        <div class="col-md-4"><label class="text-secondary small">月均客流量</label><div class="fw-bold"><span id="m_traffic">--</span> 人次</div></div>
+                        <div class="col-12"><hr class="my-2"></div>
+                        <div class="col-md-4"><div class="p-2 border rounded bg-light"><label class="text-secondary small">月均营收</label><div class="text-success fw-bold">¥ <span id="m_monthly_flow">--</span> 万</div></div></div>
+                        <div class="col-md-4"><div class="p-2 border rounded bg-light"><label class="text-secondary small">月均成本</label><div class="text-danger fw-bold">¥ <span id="m_cost">--</span> 万</div></div></div>
+                        <div class="col-md-4"><div class="p-2 border rounded bg-light"><label class="text-secondary small">注册金额</label><div class="text-primary fw-bold">¥ <span id="m_amount">--</span> 万</div></div></div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        var detailModal = document.getElementById('detailModal')
+        detailModal.addEventListener('show.bs.modal', function (event) {
+            var button = event.relatedTarget
+            var id = button.getAttribute('data-id')
+            var name = button.getAttribute('data-name')
+            var city = button.getAttribute('data-city')
+            var city_level = button.getAttribute('data-city_level')
+            var years = button.getAttribute('data-years')
+            var employees = button.getAttribute('data-employees')
+            var area = button.getAttribute('data-area')
+            var traffic = button.getAttribute('data-traffic')
+            var monthly_flow = button.getAttribute('data-monthly_flow')
+            var cost = button.getAttribute('data-cost')
+            var amount = button.getAttribute('data-amount')
+
+            detailModal.querySelector('#m_id').textContent = id
+            detailModal.querySelector('#m_name').textContent = name
+            detailModal.querySelector('#m_city').textContent = city || '未知'
+            detailModal.querySelector('#m_city_level').textContent = city_level || '未知'
+            detailModal.querySelector('#m_years').textContent = years || '0'
+            detailModal.querySelector('#m_employees').textContent = employees || '0'
+            detailModal.querySelector('#m_area').textContent = area || '0'
+            detailModal.querySelector('#m_traffic').textContent = traffic || '0'
+            detailModal.querySelector('#m_monthly_flow').textContent = monthly_flow || '0'
+            detailModal.querySelector('#m_cost').textContent = cost || '0'
+            detailModal.querySelector('#m_amount').textContent = amount
+        })
+
+        function openEditModal(button) {
+        // 1. 从按钮的 data- 属性里拿数据
+        var id = button.getAttribute('data-id');
+        var name = button.getAttribute('data-name');
+        var amount = button.getAttribute('data-amount');
+        var score = button.getAttribute('data-score');
+        var type = button.getAttribute('data-type');
+        var flow = button.getAttribute('data-monthly_flow');
+        var cost = button.getAttribute('data-cost');
+        var traffic = button.getAttribute('data-traffic');
+        var city = button.getAttribute('data-city');
+
+        // 2. 把数据填到弹窗的 input 里
+        document.getElementById('edit_id').value = id; // 填入隐藏的ID
+        document.getElementById('edit_name').value = name;
+        document.getElementById('edit_amount').value = amount;
+        document.getElementById('edit_score').value = score;
+        document.getElementById('edit_type').value = type;
+        document.getElementById('edit_flow').value = flow;
+        document.getElementById('edit_cost').value = cost;
+        document.getElementById('edit_traffic').value = traffic;
+        document.getElementById('edit_city').value = city;
+
+        // 3. 显示弹窗
+        var myModal = new bootstrap.Modal(document.getElementById('editModal'));
+        myModal.show();
+    }
+    </script>
+
+<div class="modal fade" id="addModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">📝 录入新申请</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/add" method="post">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">商户名称</label>
+                        <input type="text" name="name" class="form-control" required placeholder="例如：7-11便利店">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">申请金额 (万元)</label>
+                        <input type="number" name="amount" class="form-control" required placeholder="50">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">信用评分</label>
+                        <input type="number" name="score" class="form-control" required placeholder="650">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">月均营收 (万元)</label>
+                        <input type="number" step="0.1" name="monthly_flow" class="form-control" placeholder="例如：15.5">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">月均客流量 (人次)</label>
+                        <input type="number" name="traffic" class="form-control" placeholder="例如：3000">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">月均成本 (万元)</label>
+                        <input type="number" step="0.1" name="cost" class="form-control" placeholder="例如：10.5">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">所在城市</label>
+                        <select name="city" class="form-select">
+                            <option value="北京">北京</option>
+                            <option value="上海">上海</option>
+                            <option value="广州">广州</option>
+                            <option value="深圳">深圳</option>
+                            <option value="杭州">杭州</option>
+                            <option value="其他">其他</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">品类/商户</label>
+                        <select name="type" class="form-select">
+                            <option value="家电零售">家电零售</option>
+                            <option value="服饰零售">服饰零售</option>
+                            <option value="便利店">便利店</option>
+                            <option value="生鲜零售">生鲜零售</option>
+                            <option value="美妆零售">美妆零售</option>
+                            <option value="文具零售">文具零售</option>
+                            <option value="综合商超">综合商超</option>
+                        </select>
+                    </div>
+                    </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">保存提交</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark"> <h5 class="modal-title"><i class="fas fa-edit"></i> 修改商户信息</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/update" method="post">
+                <div class="modal-body">
+                    <input type="hidden" name="id" id="edit_id">
+
+                    <div class="mb-3">
+                        <label>商户名称</label>
+                        <input type="text" name="name" id="edit_name" class="form-control" required>
+                    </div>
+                    <div class="row">
+                        <div class="col-6 mb-3">
+                            <label>注册金额 (万)</label>
+                            <input type="number" step="0.01" name="amount" id="edit_amount" class="form-control">
+                        </div>
+                        <div class="col-6 mb-3">
+                            <label>信用评分</label>
+                            <input type="number" step="0.1" name="score" id="edit_score" class="form-control">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-6 mb-3">
+                            <label>月均营收</label>
+                            <input type="number" step="0.01" name="monthly_flow" id="edit_flow" class="form-control">
+                        </div>
+                        <div class="col-6 mb-3">
+                            <label>月均成本</label>
+                            <input type="number" step="0.01" name="cost" id="edit_cost" class="form-control">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label>月均客流</label>
+                        <input type="number" name="traffic" id="edit_traffic" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label>行业类型</label>
+                        <select name="type" id="edit_type" class="form-select">
+                            <option value="家电零售">家电零售</option>
+                            <option value="服饰零售">服饰零售</option>
+                            <option value="便利店">便利店</option>
+                            <option value="生鲜零售">生鲜零售</option>
+                            <option value="美妆零售">美妆零售</option>
+                            <option value="文具零售">文具零售</option>
+                            <option value="综合商超">综合商超</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label>所在城市</label>
+                        <input type="text" name="city" id="edit_city" class="form-control">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-warning">保存修改</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>
