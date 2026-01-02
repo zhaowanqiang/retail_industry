@@ -12,6 +12,8 @@ from flask import redirect, url_for
 from datetime import datetime
 from datetime import datetime, timedelta
 import numpy as np  # 如果用到了数值计算
+from audit_utils import read_logs, write_log
+
 
 app = Flask(__name__)
 app.secret_key = "123456"  # 随便写个密码
@@ -224,6 +226,7 @@ def login():
                 # 登录成功
                 session['user_name'] = u['username']
                 session['role'] = real_role
+                write_log(username, "登录系统", "用户身份验证通过", request.remote_addr)
                 return redirect('/dashboard')
 
         # 循环结束没找到匹配的，报错
@@ -552,6 +555,142 @@ def approve_loan(id):
         flash('审批出错，请重试', 'danger')
 
     return redirect(url_for('dashboard'))
+
+
+@app.route('/logs')
+def show_logs():
+    # 1. 权限拦截：只有 admin 能看日志
+    if session.get('role') != 'admin':
+        flash('❌ 权限不足：只有管理员可以查看审计日志', 'danger')
+        return redirect('/dashboard')
+
+    # 2. 从 audit_utils.py 读取数据
+    logs_data = read_logs()
+
+    # 3. 渲染页面
+    return render_template('audit_logs.html', logs=logs_data)
+
+
+# ==========================================
+# ▼▼▼ 个人中心 (真实修改数据库版) ▼▼▼
+# ==========================================
+@app.route('/profile', methods=['GET', 'POST'])
+def profile():
+    if 'user_name' not in session:
+        return redirect(url_for('login'))
+
+    # 1. 定义数据库文件路径 (和你的登录逻辑保持一致)
+    DATA_FILE = 'data/users.json'
+
+    if request.method == 'POST':
+        new_pass = request.form.get('new_password')
+        confirm_pass = request.form.get('confirm_password')
+        new_email = request.form.get('email')
+
+        # --- 读取现有数据 ---
+        users = []
+        if os.path.exists(DATA_FILE):
+            with open(DATA_FILE, 'r', encoding='utf-8') as f:
+                users = json.load(f)
+
+        # --- 寻找当前用户并修改 ---
+        current_user = session['user_name']
+        user_found = False
+
+        for u in users:
+            if u['username'] == current_user:
+                user_found = True
+
+                # A. 修改邮箱 (如果有填)
+                if new_email:
+                    u['email'] = new_email
+
+                    # B. 修改密码 (如果有填)
+                if new_pass:
+                    if new_pass != confirm_pass:
+                        flash('❌ 修改失败：两次输入的密码不一致', 'danger')
+                        return render_template('profile.html', user_name=current_user, role=session.get('role'))
+                    else:
+                        u['password'] = new_pass
+                        flash('✅ 密码已修改！下次登录请使用新密码', 'success')
+
+                # C. 如果只改了邮箱没改密码
+                if new_email and not new_pass:
+                    flash('✅ 个人资料已更新', 'success')
+
+                break  # 找到了就停止循环
+
+        if not user_found:
+            flash('❌ 系统错误：未找到当前用户数据', 'danger')
+
+        # --- ★★★ 关键一步：写入保存到文件 ★★★ ---
+        with open(DATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(users, f, ensure_ascii=False, indent=4)
+
+    return render_template('profile.html',
+                           user_name=session.get('user_name'),
+                           role=session.get('role'))
+
+
+# =========================================================
+# ▼▼▼ 最终修正版：只有“通过”的单子才算进放款总额 ▼▼▼
+# =========================================================
+@app.route('/api/kpi_trends')
+def kpi_trends():
+    conn = pymysql.connect(
+        host='localhost',
+        user='root',
+        password='123456',
+        database='retail_loan',
+        charset='utf8mb4',
+        cursorclass=pymysql.cursors.DictCursor
+    )
+
+    try:
+        with conn.cursor() as cursor:
+            # 1. 查总申请单数 (这个通常包括所有单子，用来衡量业务量)
+            cursor.execute("SELECT COUNT(*) as c FROM loan_data")
+            total_count = cursor.fetchone()['c']
+
+            # 2. ★★★ 关键修改：查放款总额 ★★★
+            # 逻辑：只有 status = '通过' 的，才把金额加起来！
+            cursor.execute("SELECT SUM(amount) as m FROM loan_data WHERE status = '通过'")
+            res_amount = cursor.fetchone()['m']
+            total_amount = float(res_amount) if res_amount else 0
+
+            # 3. 查平均信用分 (统计所有申请人的质量)
+            cursor.execute("SELECT AVG(score) as s FROM loan_data")
+            res_score = cursor.fetchone()['s']
+            avg_score = int(res_score) if res_score else 0
+
+            # 4. 查高风险拒单
+            cursor.execute("SELECT COUNT(*) as r FROM loan_data WHERE score < 400")
+            risk_count = cursor.fetchone()['r']
+
+            # 5. 查“待人工复核” (状态为 '待审核')
+            cursor.execute("SELECT COUNT(*) as w FROM loan_data WHERE status = '待审核'")
+            wait_review_count = cursor.fetchone()['w']
+
+    finally:
+        conn.close()
+
+    import random
+    return jsonify({
+        'total_count': total_count,
+        'count_trend': {'val': '12.5%', 'dir': 'up'},
+
+        'wait_review': wait_review_count,
+        'review_trend': {'val': '5%', 'dir': 'up'},
+
+        'total_amount': int(total_amount),
+        'amount_trend': {'val': '5.3%', 'dir': 'up'},
+
+        'risk_count': risk_count,
+        'risk_trend': {'val': '2.1%', 'dir': 'down'},
+
+        'avg_score': avg_score,
+        'score_trend': {'val': '1.8%', 'dir': 'up'}
+    })
 
 
 if __name__ == '__main__':
