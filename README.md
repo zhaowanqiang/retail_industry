@@ -58,7 +58,9 @@
 | **算法** | Scikit-learn | 随机森林算法，用于信贷风险评分模型 |
 
 ---
-📂 目录结构 (Project Structure)
+## 📂 目录结构 (Project Structure)
+
+```text
 retail_industry/
 ├── app.py                 # Flask 主程序入口 (路由、逻辑)
 ├── data/
