@@ -58,10 +58,3 @@
 | **算法** | Scikit-learn | 随机森林算法，用于信贷风险评分模型 |
 
 ---
-
-## ⚙️ 本地安装与运行 (Installation)
-
-### 1. 克隆项目
-```bash
-git clone [https://github.com/zhaowanqiang/retail_industry.git](https://github.com/zhaowanqiang/retail_industry.git)
-cd retail_industry
