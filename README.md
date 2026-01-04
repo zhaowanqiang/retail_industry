@@ -75,6 +75,7 @@ retail_industry/
     ├── prediction.html    # AI 预测页
     ├── audit_logs.html    # 审计日志页
     └── profile.html       # 个人中心页
+```
 ---
 🔑 测试账号 (Test Accounts)
 ## 🔑 测试账号 (Test Accounts)
