@@ -4,7 +4,7 @@ import random
 import json
 import os
 import pandas as pd
-import joblib   # 用于加载 AI 模型
+import joblib  # 用于加载 AI 模型
 import numpy as np  # 用于处理数组
 import pymysql
 from sqlalchemy import create_engine, text
@@ -14,13 +14,11 @@ from datetime import datetime, timedelta
 import numpy as np  # 如果用到了数值计算
 from audit_utils import read_logs, write_log
 
-
 app = Flask(__name__)
 app.secret_key = "123456"  # 随便写个密码
 DB_URI = "mysql+pymysql://root:123456@localhost:3306/retail_loan?charset=utf8mb4"
 db_engine = create_engine(DB_URI)
 app.secret_key = 'your_secret_key'
-
 
 DATA_PATH = 'data/raw/loan_data.csv'
 USER_DATA_FILE = 'data/users.json'
@@ -58,17 +56,80 @@ def save_users(users):
 # ========================================================
 # ▼▼▼ 完整修复版：统计准确，金额正常 (直接替换原函数) ▼▼▼
 # ========================================================
-def get_dashboard_data(page=1, per_page=10, search_query=''):
+def get_dashboard_data(page=1, per_page=10, search_query='', sort_column='id', sort_order='DESC', 
+                       status_filter='', type_filter='', score_min='', score_max='', 
+                       amount_min='', amount_max='', date_from='', date_to='', city_filter=''):
     # 1. 计算分页偏移量
     offset = (page - 1) * per_page
 
-    # 2. 准备搜索条件
-    where_clause = ""
+    # 2. 准备搜索条件（多条件筛选）
+    conditions = []
+    
+    # 文本搜索（商户名/ID）
     if search_query:
-        where_clause = f" WHERE id LIKE '%%{search_query}%%' OR name LIKE '%%{search_query}%%'"
+        conditions.append(f"(id LIKE '%%{search_query}%%' OR name LIKE '%%{search_query}%%')")
+    
+    # 状态筛选
+    if status_filter:
+        conditions.append(f"status LIKE '%%{status_filter}%%'")
+    
+    # 行业类型筛选
+    if type_filter:
+        conditions.append(f"type = '{type_filter}'")
+    
+    # 城市筛选
+    if city_filter:
+        conditions.append(f"city = '{city_filter}'")
+    
+    # 信用分范围筛选
+    if score_min:
+        try:
+            score_min_val = float(score_min)
+            conditions.append(f"score >= {score_min_val}")
+        except:
+            pass
+    if score_max:
+        try:
+            score_max_val = float(score_max)
+            conditions.append(f"score <= {score_max_val}")
+        except:
+            pass
+    
+    # 金额范围筛选
+    if amount_min:
+        try:
+            amount_min_val = float(amount_min)
+            conditions.append(f"amount >= {amount_min_val}")
+        except:
+            pass
+    if amount_max:
+        try:
+            amount_max_val = float(amount_max)
+            conditions.append(f"amount <= {amount_max_val}")
+        except:
+            pass
+    
+    # 日期范围筛选
+    if date_from:
+        conditions.append(f"date >= '{date_from}'")
+    if date_to:
+        conditions.append(f"date <= '{date_to}'")
+    
+    # 组合WHERE子句
+    where_clause = ""
+    if conditions:
+        where_clause = " WHERE " + " AND ".join(conditions)
 
-    # 3. 获取当前页数据 (用于显示表格)
-    sql_data = f"SELECT * FROM loan_data {where_clause} ORDER BY id DESC LIMIT {per_page} OFFSET {offset}"
+    # 3. 验证和准备排序参数（防止SQL注入）
+    allowed_columns = ['id', 'name', 'type', 'amount', 'score', 'monthly_flow', 'date', 'status', 'city', 'traffic', 'cost']
+    if sort_column not in allowed_columns:
+        sort_column = 'id'
+    
+    if sort_order.upper() not in ['ASC', 'DESC']:
+        sort_order = 'DESC'
+    
+    # 4. 获取当前页数据 (用于显示表格，支持排序)
+    sql_data = f"SELECT * FROM loan_data {where_clause} ORDER BY {sort_column} {sort_order} LIMIT {per_page} OFFSET {offset}"
     df = pd.read_sql(sql_data, db_engine)
 
     # --- 数据清洗 (防止空值报错) ---
@@ -149,6 +210,19 @@ def dashboard():
     # 1. 获取前端传来的参数
     page = request.args.get('page', 1, type=int)  # 页码，默认第1页
     query = request.args.get('q', '')
+    sort_column = request.args.get('sort', 'id')  # 排序字段，默认按ID
+    sort_order = request.args.get('order', 'DESC')  # 排序方向，默认降序
+    
+    # 筛选参数
+    status_filter = request.args.get('status', '')
+    type_filter = request.args.get('type', '')
+    score_min = request.args.get('score_min', '')
+    score_max = request.args.get('score_max', '')
+    amount_min = request.args.get('amount_min', '')
+    amount_max = request.args.get('amount_max', '')
+    date_from = request.args.get('date_from', '')
+    date_to = request.args.get('date_to', '')
+    city_filter = request.args.get('city', '')
 
     # 2. 获取用户身份 (权限控制的核心)
     # 从 session 里拿 role，拿不到就默认为 'user' (普通用户)
@@ -156,9 +230,41 @@ def dashboard():
     # 从 session 里拿名字，拿不到就显示 '未登录'
     current_user_name = session.get('user_name', '未登录')
 
-    data, stats, total_pages = get_dashboard_data(page=page, search_query=query)
+    data, stats, total_pages = get_dashboard_data(
+        page=page, 
+        search_query=query, 
+        sort_column=sort_column, 
+        sort_order=sort_order,
+        status_filter=status_filter,
+        type_filter=type_filter,
+        score_min=score_min,
+        score_max=score_max,
+        amount_min=amount_min,
+        amount_max=amount_max,
+        date_from=date_from,
+        date_to=date_to,
+        city_filter=city_filter
+    )
 
-    # 2. 这样 data=data 才能把真正的数据传过去
+    # 3. 获取筛选选项数据（用于下拉框）
+    try:
+        # 获取所有行业类型
+        types_df = pd.read_sql("SELECT DISTINCT type FROM loan_data WHERE type IS NOT NULL AND type != '' ORDER BY type", db_engine)
+        type_options = types_df['type'].tolist() if not types_df.empty else []
+        
+        # 获取所有城市
+        cities_df = pd.read_sql("SELECT DISTINCT city FROM loan_data WHERE city IS NOT NULL AND city != '' ORDER BY city", db_engine)
+        city_options = cities_df['city'].tolist() if not cities_df.empty else []
+        
+        # 获取所有状态
+        status_df = pd.read_sql("SELECT DISTINCT status FROM loan_data WHERE status IS NOT NULL AND status != '' ORDER BY status", db_engine)
+        status_options = status_df['status'].tolist() if not status_df.empty else []
+    except:
+        type_options = []
+        city_options = []
+        status_options = []
+    
+    # 4. 这样 data=data 才能把真正的数据传过去
     return render_template('dashboard.html',
                            data=data,  # 如果 HTML 要 data，给它！
                            rows=data,  # ▼ 新增：如果 HTML 要 rows，也给它！
@@ -166,6 +272,20 @@ def dashboard():
                            current_page=page,
                            total_pages=total_pages,
                            search_query=query,
+                           sort_column=sort_column,
+                           sort_order=sort_order,
+                           status_filter=status_filter,
+                           type_filter=type_filter,
+                           score_min=score_min,
+                           score_max=score_max,
+                           amount_min=amount_min,
+                           amount_max=amount_max,
+                           date_from=date_from,
+                           date_to=date_to,
+                           city_filter=city_filter,
+                           type_options=type_options,
+                           city_options=city_options,
+                           status_options=status_options,
                            role=current_role,
                            user_name=current_user_name)
 
@@ -319,9 +439,73 @@ def get_analysis_data():
         # 3. 总分析条数
         total_count = len(df)
 
+        # ===================================
+        # ★ 图表 3：柱状图数据 (Bar Chart) - 按行业类型分组统计（金额+数量+平均分）
+        # ===================================
+        bar_labels = []
+        bar_amount_data = []
+        bar_count_data = []
+        bar_score_data = []
+
+        if 'type' in df.columns:
+            # 按行业类型分组统计
+            type_stats = df.groupby('type').agg({
+                'amount': 'sum',  # 放款总额
+                'id': 'count',  # 申请数量
+                'score': 'mean'  # 平均信用分
+            }).sort_values('amount', ascending=False).head(6)  # 取前6个行业
+
+            bar_labels = type_stats.index.tolist()
+            bar_amount_data = [int(x) for x in type_stats['amount'].values.tolist()]
+            bar_count_data = type_stats['id'].values.tolist()
+            bar_score_data = [round(x, 1) for x in type_stats['score'].values.tolist()]
+        else:
+            bar_labels = ['零售行业', '其他行业']
+            bar_amount_data = [0, 0]
+            bar_count_data = [0, 0]
+            bar_score_data = [0, 0]
+
+        # ===================================
+        # ★ 图表 4：饼图数据 (Pie Chart) - 按状态分布（数量+金额占比）
+        # ===================================
+        pie_labels = []
+        pie_count_data = []
+        pie_amount_data = []
+
+        if 'status' in df.columns:
+            # 统计各状态的数量
+            status_counts = df['status'].value_counts()
+            pie_labels = status_counts.index.tolist()
+            pie_count_data = status_counts.values.tolist()
+
+            # 统计各状态的金额
+            if 'amount' in df.columns:
+                status_amounts = df.groupby('status')['amount'].sum()
+                # 按照pie_labels的顺序提取金额
+                pie_amount_data = [int(status_amounts.get(label, 0)) for label in pie_labels]
+            else:
+                pie_amount_data = [0] * len(pie_labels)
+        else:
+            pie_labels = ['通过', '待审核', '拒绝']
+            pie_count_data = [0, 0, 0]
+            pie_amount_data = [0, 0, 0]
+
         return jsonify({
             'trend': {'labels': trend_labels, 'data': trend_data},
             'radar': {'good': good_stats, 'bad': bad_stats},
+            # ▼ 改进：柱状图数据（分组数据）
+            'bar': {
+                'labels': bar_labels,
+                'amounts': bar_amount_data,  # 放款金额
+                'counts': bar_count_data,  # 申请数量
+                'scores': bar_score_data  # 平均信用分
+            },
+            # ▼ 改进：饼图数据（数量+金额）
+            'pie': {
+                'labels': pie_labels,
+                'counts': pie_count_data,  # 各状态的数量
+                'amounts': pie_amount_data  # 各状态的金额
+            },
 
             # ▼ 把算好的结论传给前端
             'insight': {
@@ -375,12 +559,22 @@ def prediction():
 @app.route('/export')
 def export_data():
     try:
-        # 1. 获取搜索词（这样用户搜什么，就导什么，体验很好）
+        # 1. 获取搜索词或批量ID（支持批量导出）
         query = request.args.get('q', '')
+        ids_param = request.args.get('ids', '')  # 批量导出：ids=id1,id2,id3
 
-        # 2. 构造 SQL 语句 (和 Dashboard 逻辑一样)
+        # 2. 构造 SQL 语句
         sql = "SELECT * FROM loan_data WHERE 1=1"
-        if query:
+
+        # 优先使用批量ID导出
+        if ids_param:
+            ids_list = ids_param.split(',')
+            # 过滤空值并构建IN子句
+            ids_list = [id.strip() for id in ids_list if id.strip()]
+            if ids_list:
+                placeholders = ','.join([f"'{id}'" for id in ids_list])
+                sql += f" AND id IN ({placeholders})"
+        elif query:
             query = str(query).strip()
             sql += f" AND (name LIKE '%%{query}%%' OR id LIKE '%%{query}%%')"
 
@@ -393,6 +587,10 @@ def export_data():
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
+        # 4. 检查是否有数据
+        if df.empty:
+            return "没有可导出的数据", 400
+
         # 5. 写入内存中的 Excel (不存硬盘，直接发给用户)
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -401,12 +599,18 @@ def export_data():
         # 指针回到文件开头，准备读取
         output.seek(0)
 
-        # 6. 发送文件给浏览器下载
+        # 6. 根据导出类型生成文件名
+        if ids_param:
+            filename = f'批量导出数据_{pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+        else:
+            filename = f'贷款数据报表_{pd.Timestamp.now().strftime("%Y%m%d")}.xlsx'
+
+        # 7. 发送文件给浏览器下载
         return send_file(
             output,
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             as_attachment=True,
-            download_name=f'贷款数据报表_{pd.Timestamp.now().strftime("%Y%m%d")}.xlsx'
+            download_name=filename
         )
     except Exception as e:
         print(f"导出失败: {e}")
@@ -431,6 +635,96 @@ def delete_loan(id):
 
     # 删完之后，刷新当前页面
     return redirect('/dashboard')
+
+
+# ==========================================
+# ▼▼▼ 批量操作功能 API ▼▼▼
+# ==========================================
+
+# 批量审批
+@app.route('/api/batch-approve', methods=['POST'])
+def batch_approve():
+    if session.get('role') != 'admin':
+        return jsonify({'success': False, 'error': '权限不足：只有管理员可以进行批量审批操作！'}), 403
+
+    try:
+        data = request.get_json()
+        ids = data.get('ids', [])
+
+        if not ids or len(ids) == 0:
+            return jsonify({'success': False, 'error': '未选择任何记录'}), 400
+
+        # 批量更新状态为"通过"
+        approved_count = 0
+        with db_engine.connect() as conn:
+            for id in ids:
+                try:
+                    conn.execute(text("UPDATE loan_data SET status = '通过' WHERE id = :id"), {"id": id})
+                    approved_count += 1
+                except Exception as e:
+                    print(f"审批 ID {id} 失败: {e}")
+                    continue
+            conn.commit()
+
+        # 记录操作日志
+        if approved_count > 0:
+            write_log(session.get('user_name', 'admin'),
+                      f"批量审批",
+                      f"成功审批 {approved_count} 条记录",
+                      request.remote_addr)
+
+        return jsonify({
+            'success': True,
+            'approved_count': approved_count,
+            'total_count': len(ids)
+        })
+
+    except Exception as e:
+        print(f"批量审批失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# 批量删除
+@app.route('/api/batch-delete', methods=['POST'])
+def batch_delete():
+    if session.get('role') != 'admin':
+        return jsonify({'success': False, 'error': '权限不足：只有管理员可以进行批量删除操作！'}), 403
+
+    try:
+        data = request.get_json()
+        ids = data.get('ids', [])
+
+        if not ids or len(ids) == 0:
+            return jsonify({'success': False, 'error': '未选择任何记录'}), 400
+
+        # 批量删除
+        deleted_count = 0
+        with db_engine.connect() as conn:
+            for id in ids:
+                try:
+                    conn.execute(text("DELETE FROM loan_data WHERE id = :id"), {"id": id})
+                    deleted_count += 1
+                except Exception as e:
+                    print(f"删除 ID {id} 失败: {e}")
+                    continue
+            conn.commit()
+
+        # 记录操作日志
+        if deleted_count > 0:
+            write_log(session.get('user_name', 'admin'),
+                      f"批量删除",
+                      f"成功删除 {deleted_count} 条记录",
+                      request.remote_addr)
+
+        return jsonify({
+            'success': True,
+            'deleted_count': deleted_count,
+            'total_count': len(ids)
+        })
+
+    except Exception as e:
+        print(f"批量删除失败: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/add', methods=['POST'])
@@ -647,49 +941,108 @@ def kpi_trends():
     )
 
     try:
+        today = datetime.now().date()
+        last_week_start = today - timedelta(days=7)
+        
         with conn.cursor() as cursor:
-            # 1. 查总申请单数 (这个通常包括所有单子，用来衡量业务量)
+            # 1. 查总申请单数 (当前和上周对比)
             cursor.execute("SELECT COUNT(*) as c FROM loan_data")
             total_count = cursor.fetchone()['c']
+            
+            # 计算7天前的总数（用于对比）
+            cursor.execute("SELECT COUNT(*) as c FROM loan_data WHERE date < %s", (last_week_start,))
+            last_week_count = cursor.fetchone()['c']
+            # 计算增长率：相对于7天前的数据
+            count_change = ((total_count - last_week_count) / last_week_count * 100) if last_week_count > 0 else 0
+            count_trend_dir = 'up' if count_change > 0 else ('down' if count_change < 0 else 'flat')
+            count_trend_val = f"{abs(count_change):.1f}%"
 
-            # 2. ★★★ 关键修改：查放款总额 ★★★
-            # 逻辑：只有 status = '通过' 的，才把金额加起来！
+            # 2. 查放款总额 (当前和上周对比)
             cursor.execute("SELECT SUM(amount) as m FROM loan_data WHERE status = '通过'")
             res_amount = cursor.fetchone()['m']
             total_amount = float(res_amount) if res_amount else 0
+            
+            cursor.execute("SELECT SUM(amount) as m FROM loan_data WHERE status = '通过' AND date < %s", (last_week_start,))
+            res_last_amount = cursor.fetchone()['m']
+            last_week_amount = float(res_last_amount) if res_last_amount else 0
+            amount_change = ((total_amount - last_week_amount) / last_week_amount * 100) if last_week_amount > 0 else 0
+            amount_trend_dir = 'up' if amount_change > 0 else ('down' if amount_change < 0 else 'flat')
+            amount_trend_val = f"{abs(amount_change):.1f}%"
 
-            # 3. 查平均信用分 (统计所有申请人的质量)
+            # 3. 查平均信用分 (当前和上周对比)
             cursor.execute("SELECT AVG(score) as s FROM loan_data")
             res_score = cursor.fetchone()['s']
-            avg_score = int(res_score) if res_score else 0
+            avg_score = float(res_score) if res_score else 0
+            
+            cursor.execute("SELECT AVG(score) as s FROM loan_data WHERE date < %s", (last_week_start,))
+            res_last_score = cursor.fetchone()['s']
+            last_week_score = float(res_last_score) if res_last_score else 0
+            score_change = ((avg_score - last_week_score) / last_week_score * 100) if last_week_score > 0 else 0
+            score_trend_dir = 'up' if score_change > 0 else ('down' if score_change < 0 else 'flat')
+            score_trend_val = f"{abs(score_change):.1f}%"
 
-            # 4. 查高风险拒单
-            cursor.execute("SELECT COUNT(*) as r FROM loan_data WHERE score < 400")
-            risk_count = cursor.fetchone()['r']
-
-            # 5. 查“待人工复核” (状态为 '待审核')
+            # 4. 查"待人工复核" (当前和上周对比)
             cursor.execute("SELECT COUNT(*) as w FROM loan_data WHERE status = '待审核'")
             wait_review_count = cursor.fetchone()['w']
+            
+            cursor.execute("SELECT COUNT(*) as w FROM loan_data WHERE status = '待审核' AND date < %s", (last_week_start,))
+            last_week_review = cursor.fetchone()['w']
+            review_change = ((wait_review_count - last_week_review) / last_week_review * 100) if last_week_review > 0 else 0
+            review_trend_dir = 'up' if review_change > 0 else ('down' if review_change < 0 else 'flat')
+            review_trend_val = f"{abs(review_change):.1f}%"
+            
+            # 5. 获取最近7天的数据用于趋势图
+            cursor.execute("""
+                SELECT DATE(date) as day, COUNT(*) as count 
+                FROM loan_data 
+                WHERE date >= %s 
+                GROUP BY DATE(date) 
+                ORDER BY day
+            """, (last_week_start,))
+            daily_counts = cursor.fetchall()
+            
+            cursor.execute("""
+                SELECT DATE(date) as day, SUM(amount) as amount 
+                FROM loan_data 
+                WHERE date >= %s AND status = '通过'
+                GROUP BY DATE(date) 
+                ORDER BY day
+            """, (last_week_start,))
+            daily_amounts = cursor.fetchall()
 
     finally:
         conn.close()
 
-    import random
+    # 处理趋势数据（填充缺失的日期）
+    count_data = [0] * 7
+    amount_data = [0] * 7
+    for i in range(7):
+        day = last_week_start + timedelta(days=i)
+        day_str = day.strftime('%Y-%m-%d')
+        # 查找对应日期的数据
+        for item in daily_counts:
+            if item['day'].strftime('%Y-%m-%d') == day_str:
+                count_data[i] = item['count']
+                break
+        for item in daily_amounts:
+            if item['day'].strftime('%Y-%m-%d') == day_str:
+                amount_data[i] = float(item['amount']) if item['amount'] else 0
+                break
+
     return jsonify({
         'total_count': total_count,
-        'count_trend': {'val': '12.5%', 'dir': 'up'},
+        'count_trend': {'val': count_trend_val, 'dir': count_trend_dir},
+        'count_sparkline': count_data,
 
         'wait_review': wait_review_count,
-        'review_trend': {'val': '5%', 'dir': 'up'},
+        'review_trend': {'val': review_trend_val, 'dir': review_trend_dir},
 
         'total_amount': int(total_amount),
-        'amount_trend': {'val': '5.3%', 'dir': 'up'},
+        'amount_trend': {'val': amount_trend_val, 'dir': amount_trend_dir},
+        'amount_sparkline': amount_data,
 
-        'risk_count': risk_count,
-        'risk_trend': {'val': '2.1%', 'dir': 'down'},
-
-        'avg_score': avg_score,
-        'score_trend': {'val': '1.8%', 'dir': 'up'}
+        'avg_score': int(avg_score),
+        'score_trend': {'val': score_trend_val, 'dir': score_trend_dir}
     })
 
 
