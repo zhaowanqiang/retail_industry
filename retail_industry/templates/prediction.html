@@ -5,6 +5,7 @@
     <title>AI 智能贷款预测</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         body { background-color: #F3F0FF; font-family: 'Microsoft YaHei', sans-serif; }
         .navbar { background: linear-gradient(135deg, #663399 0%, #9370DB 100%); }
@@ -14,27 +15,121 @@
         .main-card {
             background: white; border-radius: 15px; padding: 40px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.1); margin-top: 30px;
-            max-width: 800px; margin-left: auto; margin-right: auto;
+            max-width: 1000px; margin-left: auto; margin-right: auto;
         }
         .form-label { font-weight: 600; color: #555; }
+        .form-label .info-text { font-size: 0.85em; color: #888; font-weight: normal; }
+        
+        .input-group { position: relative; }
+        .input-validation { 
+            position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+            font-size: 14px; display: none;
+        }
+        .input-validation.valid { color: #28a745; }
+        .input-validation.invalid { color: #dc3545; }
+        
         .btn-predict {
             background: linear-gradient(to right, #663399, #9370DB); border: none;
             padding: 12px 30px; font-size: 18px; border-radius: 30px; width: 100%;
-            transition: transform 0.2s;
+            transition: transform 0.2s; position: relative;
         }
         .btn-predict:hover { transform: scale(1.02); }
+        .btn-predict:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        /* 加载动画 */
+        .loading-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 9999; align-items: center; justify-content: center;
+        }
+        .loading-overlay.show { display: flex; }
+        .spinner-border-lg {
+            width: 3rem; height: 3rem; border-width: 0.3em;
+            border-color: #663399 transparent #663399 transparent;
+        }
 
         /* 结果展示区 */
         .result-box {
             margin-top: 30px; padding: 30px; border-radius: 15px;
-            text-align: center; display: none; /* 默认隐藏 */
+            text-align: center; display: none; animation: fadeIn 0.5s;
         }
-        .result-show { display: block; animation: fadeIn 0.5s; }
+        .result-show { display: block; }
 
         .pass-box { background-color: #e6f9ed; border: 2px solid #28a745; color: #28a745; }
         .reject-box { background-color: #ffe6e6; border: 2px solid #dc3545; color: #dc3545; }
 
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        /* 概率进度条 */
+        .probability-container {
+            margin: 20px 0;
+        }
+        .probability-label {
+            font-size: 1.1em; font-weight: bold; margin-bottom: 10px;
+            color: inherit;
+        }
+        .probability-bar {
+            height: 35px; border-radius: 15px; margin: 0;
+            background: linear-gradient(90deg, #dc3545 0%, #ffc107 50%, #28a745 100%);
+            position: relative; overflow: hidden;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .probability-fill {
+            height: 100%; background: rgba(255,255,255,0.85); transition: width 1s ease;
+            position: absolute; right: 0; top: 0;
+        }
+        .probability-value {
+            position: absolute; left: 0; top: 0; height: 100%; width: 100%;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: bold; font-size: 1.05em; color: #2c3e50;
+            z-index: 1; pointer-events: none;
+            text-shadow: 0 1px 2px rgba(255,255,255,0.8);
+        }
+
+        /* 特征重要性图表容器 */
+        .chart-container {
+            margin: 30px 0; padding: 20px; background: #f8f9fa; border-radius: 10px;
+        }
+
+        /* 风险指标卡片 */
+        .metric-card {
+            background: white; border-radius: 10px; padding: 20px; margin: 10px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05); text-align: center;
+        }
+        .metric-card .metric-value {
+            font-size: 2em; font-weight: bold; color: #663399; margin: 10px 0;
+        }
+        .metric-card .metric-label {
+            color: #666; font-size: 0.9em;
+        }
+
+        /* 优化建议 */
+        .suggestions-box {
+            margin-top: 20px; padding: 20px; background: #fff3cd; border-radius: 10px;
+            border-left: 4px solid #ffc107;
+        }
+        .suggestions-box ul {
+            margin: 0; padding-left: 20px;
+        }
+        .suggestions-box li {
+            margin: 10px 0; color: #856404;
+        }
+
+        /* 风险等级标签 */
+        .risk-badge {
+            display: inline-block; padding: 8px 16px; border-radius: 20px;
+            font-weight: bold; margin: 10px 0;
+        }
+        .risk-low { background: #d4edda; color: #155724; }
+        .risk-medium { background: #fff3cd; color: #856404; }
+        .risk-high { background: #f8d7da; color: #721c24; }
+
+        @keyframes fadeIn { 
+            from { opacity: 0; transform: translateY(20px); } 
+            to { opacity: 1; transform: translateY(0); } 
+        }
+
+        /* 输入范围提示 */
+        .range-hint {
+            font-size: 0.75em; color: #999; margin-top: 5px;
+        }
     </style>
 </head>
 <body>
@@ -53,6 +148,16 @@
         </div>
     </nav>
 
+    <!-- 加载遮罩层 -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="text-center">
+            <div class="spinner-border spinner-border-lg" role="status">
+                <span class="visually-hidden">加载中...</span>
+            </div>
+            <p class="text-white mt-3">AI 正在分析中...</p>
+        </div>
+    </div>
+
     <div class="container">
         <div class="main-card">
             <h3 class="text-center mb-4" style="color: #663399;">
@@ -62,67 +167,143 @@
                 基于随机森林 (Random Forest) 算法，输入商户核心经营指标，系统将自动评估其贷款风险。
             </p>
 
-            <form method="POST" action="/prediction">
+            <form id="predictionForm" method="POST" action="/prediction">
                 <div class="row g-4">
                     <div class="col-md-6">
-                        <label class="form-label">注册金额 (万元)</label>
+                        <label class="form-label">
+                            注册金额 (万元)
+                            <span class="info-text">(影响权重: 15%)</span>
+                        </label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="fas fa-coins"></i></span>
-                            <input type="number" name="amount" class="form-control" placeholder="例如: 50" required step="0.1">
+                            <input type="number" name="amount" id="amount" class="form-control" 
+                                   placeholder="例如: 50" required step="0.1" min="0">
+                            <span class="input-validation" id="amount-validation"></span>
                         </div>
+                        <div class="range-hint">建议范围: 10-500 万元</div>
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">企业信用评分 (0-1000)</label>
+                        <label class="form-label">
+                            企业信用评分 (0-1000)
+                            <span class="info-text">(影响权重: 25%)</span>
+                        </label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="fas fa-star"></i></span>
-                            <input type="number" name="score" class="form-control" placeholder="例如: 650" required>
+                            <input type="number" name="score" id="score" class="form-control" 
+                                   placeholder="例如: 650" required min="0" max="1000">
+                            <span class="input-validation" id="score-validation"></span>
                         </div>
+                        <div class="range-hint">建议范围: 500-1000 分</div>
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">经营年份 (年)</label>
+                        <label class="form-label">
+                            经营年份 (年)
+                            <span class="info-text">(影响权重: 12%)</span>
+                        </label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="fas fa-history"></i></span>
-                            <input type="number" name="years" class="form-control" placeholder="例如: 5" required>
+                            <input type="number" name="years" id="years" class="form-control" 
+                                   placeholder="例如: 5" required min="0" step="0.1">
+                            <span class="input-validation" id="years-validation"></span>
                         </div>
+                        <div class="range-hint">建议范围: 1-20 年</div>
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">月均营收 (万元)</label>
+                        <label class="form-label">
+                            月均营收 (万元)
+                            <span class="info-text">(影响权重: 22%)</span>
+                        </label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="fas fa-money-bill-wave"></i></span>
-                            <input type="number" name="monthly_flow" class="form-control" placeholder="例如: 20" required step="0.1">
+                            <input type="number" name="monthly_flow" id="monthly_flow" class="form-control" 
+                                   placeholder="例如: 20" required step="0.1" min="0">
+                            <span class="input-validation" id="monthly_flow-validation"></span>
                         </div>
+                        <div class="range-hint">建议范围: 5-200 万元</div>
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">月均成本 (万元)</label>
+                        <label class="form-label">
+                            月均成本 (万元)
+                            <span class="info-text">(影响权重: 18%)</span>
+                        </label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="fas fa-file-invoice-dollar"></i></span>
-                            <input type="number" name="cost" class="form-control" placeholder="例如: 15" required step="0.1">
+                            <input type="number" name="cost" id="cost" class="form-control" 
+                                   placeholder="例如: 15" required step="0.1" min="0">
+                            <span class="input-validation" id="cost-validation"></span>
                         </div>
+                        <div class="range-hint">建议范围: 3-150 万元</div>
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">月均客流量 (人次)</label>
+                        <label class="form-label">
+                            月均客流量 (人次)
+                            <span class="info-text">(影响权重: 8%)</span>
+                        </label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="fas fa-users"></i></span>
-                            <input type="number" name="traffic" class="form-control" placeholder="例如: 3000" required>
+                            <input type="number" name="traffic" id="traffic" class="form-control" 
+                                   placeholder="例如: 3000" required min="0">
+                            <span class="input-validation" id="traffic-validation"></span>
                         </div>
+                        <div class="range-hint">建议范围: 500-10000 人次</div>
                     </div>
 
                     <div class="col-12 mt-5">
-                        <button type="submit" class="btn btn-primary btn-predict">
+                        <button type="submit" class="btn btn-primary btn-predict" id="predictBtn">
                             <i class="fas fa-calculator me-2"></i>开始 AI 评估
                         </button>
                     </div>
                 </div>
             </form>
 
+            <!-- 结果展示区 -->
+            <div id="resultContainer" style="display: none;">
+                <!-- 主要结果 -->
+                <div id="mainResult" class="result-box result-show"></div>
+
+                <!-- 风险指标 -->
+                <div class="row mt-4" id="metricsContainer" style="display: none;">
+                    <div class="col-md-4">
+                        <div class="metric-card">
+                            <div class="metric-label">利润率</div>
+                            <div class="metric-value" id="profitMargin">-</div>
+                            <div class="metric-label">月均营收 - 成本</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="metric-card">
+                            <div class="metric-label">单客利润</div>
+                            <div class="metric-value" id="profitPerCustomer">-</div>
+                            <div class="metric-label">元/人次</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="metric-card">
+                            <div class="metric-label">风险等级</div>
+                            <div class="metric-value" id="riskLevel">-</div>
+                            <div class="metric-label" id="riskBadge"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 特征重要性图表 -->
+                <div class="chart-container" id="importanceChartContainer" style="display: none;">
+                    <h5 class="text-center mb-3"><i class="fas fa-chart-bar me-2"></i>特征重要性分析</h5>
+                    <canvas id="importanceChart"></canvas>
+                </div>
+
+                <!-- 优化建议 -->
+                <div id="suggestionsContainer" style="display: none;"></div>
+            </div>
+
+            <!-- 兼容旧的服务器端渲染结果 -->
             {% if result %}
             <div class="result-box result-show {% if result.is_pass == 1 %}pass-box{% else %}reject-box{% endif %}">
-
                 {% if result.is_pass == 1 %}
                     <i class="fas fa-check-circle fa-4x mb-3"></i>
                     <h2>建议审批通过</h2>
@@ -134,7 +315,6 @@
                     <p class="fs-5">通过概率仅为: <strong>{{ result.probability }}%</strong></p>
                     <p>该商户存在较高风险，建议人工复核或拒单。</p>
                 {% endif %}
-
             </div>
             {% endif %}
 
@@ -142,5 +322,246 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 输入验证
+        const inputs = ['amount', 'score', 'years', 'monthly_flow', 'cost', 'traffic'];
+        const validationRules = {
+            amount: { min: 0, max: 1000, message: '请输入合理的注册金额' },
+            score: { min: 0, max: 1000, message: '信用评分范围: 0-1000' },
+            years: { min: 0, max: 50, message: '请输入合理的经营年限' },
+            monthly_flow: { min: 0, max: 1000, message: '请输入合理的月均营收' },
+            cost: { min: 0, max: 1000, message: '请输入合理的月均成本' },
+            traffic: { min: 0, max: 100000, message: '请输入合理的客流量' }
+        };
+
+        inputs.forEach(id => {
+            const input = document.getElementById(id);
+            const validation = document.getElementById(id + '-validation');
+            
+            input.addEventListener('blur', function() {
+                validateInput(id, this.value);
+            });
+
+            input.addEventListener('input', function() {
+                if (validation.style.display === 'block') {
+                    validateInput(id, this.value);
+                }
+            });
+        });
+
+        function validateInput(id, value) {
+            const input = document.getElementById(id);
+            const validation = document.getElementById(id + '-validation');
+            const rule = validationRules[id];
+            const numValue = parseFloat(value);
+
+            if (value === '' || isNaN(numValue)) {
+                validation.textContent = '✗';
+                validation.className = 'input-validation invalid';
+                validation.style.display = 'block';
+                return false;
+            }
+
+            if (numValue < rule.min || numValue > rule.max) {
+                validation.textContent = '✗';
+                validation.className = 'input-validation invalid';
+                validation.style.display = 'block';
+                return false;
+            }
+
+            validation.textContent = '✓';
+            validation.className = 'input-validation valid';
+            validation.style.display = 'block';
+            return true;
+        }
+
+        // AJAX 表单提交
+        document.getElementById('predictionForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // 验证所有输入
+            let allValid = true;
+            inputs.forEach(id => {
+                const input = document.getElementById(id);
+                if (!validateInput(id, input.value)) {
+                    allValid = false;
+                }
+            });
+
+            if (!allValid) {
+                alert('请检查输入数据是否有效');
+                return;
+            }
+
+            // 收集表单数据
+            const formData = {
+                amount: parseFloat(document.getElementById('amount').value),
+                score: parseFloat(document.getElementById('score').value),
+                years: parseFloat(document.getElementById('years').value),
+                monthly_flow: parseFloat(document.getElementById('monthly_flow').value),
+                cost: parseFloat(document.getElementById('cost').value),
+                traffic: parseFloat(document.getElementById('traffic').value)
+            };
+
+            // 显示加载动画
+            document.getElementById('loadingOverlay').classList.add('show');
+            document.getElementById('predictBtn').disabled = true;
+
+            // 发送AJAX请求
+            fetch('/api/prediction', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(formData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('loadingOverlay').classList.remove('show');
+                document.getElementById('predictBtn').disabled = false;
+
+                if (data.error) {
+                    alert('预测失败: ' + data.error);
+                    return;
+                }
+
+                displayResults(data.result);
+            })
+            .catch(error => {
+                document.getElementById('loadingOverlay').classList.remove('show');
+                document.getElementById('predictBtn').disabled = false;
+                alert('请求失败: ' + error.message);
+            });
+        });
+
+        // 显示结果
+        function displayResults(result) {
+            const container = document.getElementById('resultContainer');
+            const mainResult = document.getElementById('mainResult');
+            
+            // 清空之前的结果
+            mainResult.className = 'result-box result-show';
+            mainResult.innerHTML = '';
+
+            // 设置结果样式
+            if (result.is_pass === 1) {
+                mainResult.classList.add('pass-box');
+                mainResult.innerHTML = `
+                    <i class="fas fa-check-circle fa-4x mb-3"></i>
+                    <h2>建议审批通过</h2>
+                    <div class="probability-container">
+                        <div class="probability-label">通过概率: ${result.probability}%</div>
+                        <div class="probability-bar">
+                            <div class="probability-fill" style="width: ${100 - result.probability}%;"></div>
+                            <div class="probability-value">${result.probability}%</div>
+                        </div>
+                    </div>
+                    <p>该商户经营状况良好，属于优质客户。</p>
+                `;
+            } else {
+                mainResult.classList.add('reject-box');
+                mainResult.innerHTML = `
+                    <i class="fas fa-times-circle fa-4x mb-3"></i>
+                    <h2>建议拒绝贷款</h2>
+                    <div class="probability-container">
+                        <div class="probability-label">通过概率: ${result.probability}%</div>
+                        <div class="probability-bar">
+                            <div class="probability-fill" style="width: ${100 - result.probability}%;"></div>
+                            <div class="probability-value">${result.probability}%</div>
+                        </div>
+                    </div>
+                    <p>该商户存在较高风险，建议人工复核或拒单。</p>
+                `;
+            }
+
+            // 显示风险指标
+            const metricsContainer = document.getElementById('metricsContainer');
+            document.getElementById('profitMargin').textContent = result.profit_margin + '%';
+            document.getElementById('profitPerCustomer').textContent = result.profit_per_customer;
+            document.getElementById('riskLevel').textContent = result.risk_level;
+            
+            const riskBadge = document.getElementById('riskBadge');
+            riskBadge.innerHTML = `<span class="risk-badge ${result.probability > 70 ? 'risk-low' : (result.probability > 40 ? 'risk-medium' : 'risk-high')}">${result.risk_level}</span>`;
+            metricsContainer.style.display = 'flex';
+
+            // 显示特征重要性图表
+            if (result.feature_importance && result.feature_importance.length > 0) {
+                displayImportanceChart(result.feature_importance);
+            }
+
+            // 显示优化建议
+            if (result.suggestions && result.suggestions.length > 0) {
+                const suggestionsContainer = document.getElementById('suggestionsContainer');
+                suggestionsContainer.innerHTML = `
+                    <div class="suggestions-box">
+                        <h5><i class="fas fa-lightbulb me-2"></i>优化建议</h5>
+                        <ul>
+                            ${result.suggestions.map(s => `<li>${s}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+                suggestionsContainer.style.display = 'block';
+            }
+
+            container.style.display = 'block';
+            mainResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // 显示特征重要性图表
+        let importanceChart = null;
+        function displayImportanceChart(featureData) {
+            const container = document.getElementById('importanceChartContainer');
+            const ctx = document.getElementById('importanceChart').getContext('2d');
+
+            if (importanceChart) {
+                importanceChart.destroy();
+            }
+
+            const labels = featureData.map(f => f.name);
+            const importances = featureData.map(f => f.importance);
+
+            importanceChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '重要性 (%)',
+                        data: importances,
+                        backgroundColor: 'rgba(102, 51, 153, 0.6)',
+                        borderColor: 'rgba(102, 51, 153, 1)',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return '重要性: ' + context.parsed.y + '%';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            container.style.display = 'block';
+        }
+    </script>
 </body>
 </html>

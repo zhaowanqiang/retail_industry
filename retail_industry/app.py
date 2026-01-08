@@ -541,11 +541,34 @@ def prediction():
             # 3. 进行预测
             if model:
                 pred = model.predict(input_data)[0]  # 结果是 0 或 1
-                proba = model.predict_proba(input_data)[0][1]  # 获取“通过”的概率 (0.x)
-
+                proba = model.predict_proba(input_data)[0][1]  # 获取"通过"的概率 (0.x)
+                
+                # 获取特征重要性
+                feature_names = ['注册金额', '企业信用评分', '经营年份', '月均营收', '月均成本', '月均客流量']
+                feature_importance = {}
+                if hasattr(model, 'feature_importances_'):
+                    importances = model.feature_importances_
+                    for i, name in enumerate(feature_names):
+                        feature_importance[name] = round(float(importances[i]) * 100, 2)
+                
+                # 计算额外指标
+                profit_margin = round((monthly_flow - cost) / monthly_flow * 100, 2) if monthly_flow > 0 else 0
+                profit_per_customer = round((monthly_flow - cost) / traffic, 2) if traffic > 0 else 0
+                
                 result = {
                     "is_pass": int(pred),  # 1是通过，0是拒绝
-                    "probability": round(proba * 100, 1)  # 变成百分数，保留1位小数
+                    "probability": round(proba * 100, 1),  # 变成百分数，保留1位小数
+                    "feature_importance": feature_importance,  # 特征重要性
+                    "profit_margin": profit_margin,  # 利润率
+                    "profit_per_customer": profit_per_customer,  # 单客利润
+                    "input_data": {
+                        "amount": amount,
+                        "score": score,
+                        "years": years,
+                        "monthly_flow": monthly_flow,
+                        "cost": cost,
+                        "traffic": traffic
+                    }
                 }
             else:
                 flash("模型未加载，无法预测，请检查后台日志")
@@ -553,6 +576,71 @@ def prediction():
             flash(f"输入数据有误: {e}")
 
     return render_template('prediction.html', result=result)
+
+
+@app.route('/api/prediction', methods=['POST'])  # AJAX API接口
+def api_prediction():
+    """AJAX接口，返回JSON格式的预测结果"""
+    try:
+        data = request.get_json()
+        amount = float(data.get('amount', 0))
+        score = float(data.get('score', 0))
+        years = float(data.get('years', 0))
+        monthly_flow = float(data.get('monthly_flow', 0))
+        cost = float(data.get('cost', 0))
+        traffic = float(data.get('traffic', 0))
+
+        input_data = np.array([[amount, score, years, monthly_flow, cost, traffic]])
+
+        if not model:
+            return jsonify({"error": "模型未加载"}), 500
+
+        pred = model.predict(input_data)[0]
+        proba = model.predict_proba(input_data)[0][1]
+        
+        # 获取特征重要性
+        feature_names = ['注册金额', '企业信用评分', '经营年份', '月均营收', '月均成本', '月均客流量']
+        feature_importance = []
+        if hasattr(model, 'feature_importances_'):
+            importances = model.feature_importances_
+            for i, name in enumerate(feature_names):
+                feature_importance.append({
+                    "name": name,
+                    "importance": round(float(importances[i]) * 100, 2)
+                })
+        
+        # 计算额外指标
+        profit_margin = round((monthly_flow - cost) / monthly_flow * 100, 2) if monthly_flow > 0 else 0
+        profit_per_customer = round((monthly_flow - cost) / traffic, 2) if traffic > 0 else 0
+        
+        # 生成优化建议
+        suggestions = []
+        if pred == 0:  # 被拒绝的情况
+            if score < 600:
+                suggestions.append("建议提升企业信用评分至600分以上")
+            if profit_margin < 20:
+                suggestions.append(f"当前利润率{profit_margin}%较低，建议优化成本结构或提升营收")
+            if years < 3:
+                suggestions.append("经营年限较短，建议提供更多经营历史证明")
+            if monthly_flow < cost:
+                suggestions.append("月均营收低于成本，存在经营风险，需改善盈利模式")
+            if traffic < 1000:
+                suggestions.append("客流量偏低，建议加强营销推广")
+        
+        return jsonify({
+            "success": True,
+            "result": {
+                "is_pass": int(pred),
+                "probability": round(proba * 100, 1),
+                "feature_importance": feature_importance,
+                "profit_margin": profit_margin,
+                "profit_per_customer": profit_per_customer,
+                "suggestions": suggestions,
+                "risk_level": "低风险" if proba > 0.7 else ("中风险" if proba > 0.4 else "高风险")
+            }
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 
 # 导出 Excel 的功能
